@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แอปเตือนการกินยา (Medicine Reminder)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#3b82f6',
+                        'secondary': '#10b981',
+                        'background': '#f9fafb',
+                        'card': '#ffffff',
+                    },
+                },
+                fontFamily: {
+                    sans: ['Inter', 'sans-serif'],
+                },
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #d1d5db;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-background min-h-screen p-4 sm:p-8 font-sans">
+
+    <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-70 flex items-center justify-center z-50">
+        <div class="flex flex-col items-center">
+            <svg class="animate-spin -ml-1 mr-3 h-8 w-8 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-2 text-gray-700">กำลังโหลดข้อมูล...</p>
+        </div>
+    </div>
+
+    <main class="max-w-4xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-primary mb-2">💊 แอปเตือนการกินยา</h1>
+            <p id="user-info" class="text-sm text-gray-500">
+                รหัสผู้ใช้: <span id="user-id">...</span>
+            </p>
+        </header>
+
+        <!-- Add Medicine Form -->
+        <section class="bg-card p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">เพิ่มยาใหม่</h2>
+            <form id="add-medicine-form" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Medicine Name -->
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700">ชื่อยา</label>
+                        <input type="text" id="name" required placeholder="เช่น พาราเซตามอล"
+                               class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary">
+                    </div>
+                    <!-- Dosage -->
+                    <div>
+                        <label for="dosage" class="block text-sm font-medium text-gray-700">ปริมาณ (Dosage)</label>
+                        <input type="text" id="dosage" required placeholder="เช่น 500mg หรือ 1 เม็ด"
+                               class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary">
+                    </div>
+                    <!-- Frequency -->
+                    <div>
+                        <label for="frequency" class="block text-sm font-medium text-gray-700">ความถี่</label>
+                        <select id="frequency" required
+                                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border focus:ring-primary focus:border-primary bg-white">
+                            <option value="" disabled selected>เลือกความถี่</option>
+                            <option value="24">วันละ 1 ครั้ง (ทุก 24 ชม.)</option>
+                            <option value="12">วันละ 2 ครั้ง (ทุก 12 ชม.)</option>
+                            <option value="8">วันละ 3 ครั้ง (ทุก 8 ชม.)</option>
+                            <option value="6">วันละ 4 ครั้ง (ทุก 6 ชม.)</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit"
+                        class="w-full py-3 px-4 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-secondary hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary transition duration-150 ease-in-out">
+                    บันทึกยา
+                </button>
+                <p id="error-message" class="text-red-500 text-sm hidden mt-2"></p>
+            </form>
+        </section>
+
+        <!-- Medicine List -->
+        <section class="bg-card p-6 rounded-xl shadow-lg">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">รายการยาที่ต้องทาน</h2>
+            <div id="medicines-list" class="space-y-4">
+                <p id="empty-state" class="text-gray-500 text-center py-4 hidden">
+                    คุณยังไม่มีรายการยาที่ต้องทาน! กรุณาเพิ่มยาใหม่ด้านบน
+                </p>
+                <!-- Medicine cards will be injected here -->
+            </div>
+        </section>
+
+        <!-- Modal for confirmation/errors -->
+        <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onclick="closeModal(event)">
+            <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm" onclick="event.stopPropagation()">
+                <h3 id="modal-title" class="text-xl font-bold mb-3 text-gray-800"></h3>
+                <p id="modal-body" class="text-gray-600 mb-4"></p>
+                <div class="flex justify-end space-x-2">
+                    <button id="modal-confirm-btn" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition hidden">ยืนยัน</button>
+                    <button id="modal-close-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition">ปิด</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, updateDoc, onSnapshot, collection, query, orderBy, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- GLOBAL VARIABLES & FIREBASE SETUP ---
+        // Global variables provided by the environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db;
+        let auth;
+        let userId = null;
+        let isAuthReady = false;
+       
+        // --- UTILITIES ---
+
+        function showLoading(show) {
+            document.getElementById('loading-overlay').classList.toggle('hidden', !show);
+        }
+
+        function showMessage(title, body) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-body').textContent = body;
+            document.getElementById('modal-confirm-btn').classList.add('hidden');
+            document.getElementById('modal').classList.remove('hidden');
+        }
+       
+        window.closeModal = function(event) {
+            if (event.target.id === 'modal' || event.target.id === 'modal-close-btn') {
+                document.getElementById('modal').classList.add('hidden');
+            }
+        }
+
+        document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+
+        function formatNextDoseTime(timestamp) {
+            if (!timestamp) return 'ไม่มีข้อมูล';
+            const date = timestamp.toDate();
+            const options = {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZoneName: 'short'
+            };
+            try {
+                // Use 'th-TH' locale for Thai formatting
+                return date.toLocaleDateString('th-TH', options);
+            } catch (e) {
+                console.error("Error formatting date:", e);
+                return date.toLocaleString();
+            }
+        }
+
+        // --- FIREBASE INITIALIZATION AND AUTH ---
+
+        async function initFirebase() {
+            showLoading(true);
+            try {
+                setLogLevel('debug'); // Enable detailed logging for debugging
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // 1. Authenticate the user
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // 2. Setup Auth State Listener
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user-id').textContent = userId;
+                        isAuthReady = true;
+                        console.log("Firebase Auth Ready. User ID:", userId);
+                        setupRealtimeListener();
+                    } else {
+                        // This case should be rare since we sign in anonymously as fallback
+                        userId = null;
+                        isAuthReady = true;
+                        console.log("User signed out or failed to auth.");
+                        document.getElementById('user-id').textContent = 'ไม่สามารถระบุตัวตน';
+                    }
+                    showLoading(false);
+                });
+
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+                showMessage('ข้อผิดพลาดในการเชื่อมต่อ', `ไม่สามารถเชื่อมต่อ Firebase ได้: ${error.message}`);
+                showLoading(false);
+            }
+        }
+
+        // --- FIRESTORE OPERATIONS ---
+
+        const getMedicineCollectionRef = () => {
+            if (!db || !userId) {
+                console.error("Firestore or User ID is not available.");
+                return null;
+            }
+            // Path: /artifacts/{appId}/users/{userId}/medicines
+            return collection(db, `artifacts/${appId}/users/${userId}/medicines`);
+        };
+
+        async function saveMedicine(medicineData) {
+            const collectionRef = getMedicineCollectionRef();
+            if (!collectionRef) return;
+
+            try {
+                // Initial nextDose is set to the current time plus the frequency hours
+                const now = new Date();
+                const nextDoseTime = new Date(now.getTime() + medicineData.frequencyHours * 60 * 60 * 1000);
+
+                await addDoc(collectionRef, {
+                    name: medicineData.name,
+                    dosage: medicineData.dosage,
+                    frequencyHours: parseInt(medicineData.frequency), // Store as number
+                    nextDose: nextDoseTime, // Store the Date object, Firestore converts to Timestamp
+                    createdAt: serverTimestamp(),
+                });
+                document.getElementById('add-medicine-form').reset();
+                showMessage('สำเร็จ', 'บันทึกรายการยาใหม่เรียบร้อยแล้ว');
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                showMessage('ข้อผิดพลาด', `ไม่สามารถบันทึกรายการยาได้: ${e.message}`);
+            }
+        }
+
+        async function takeMedicine(docId, frequencyHours) {
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/medicines`, docId);
+            if (!docRef) return;
+
+            try {
+                // Calculate the new nextDose time based on the moment the user clicked 'Take'
+                const now = new Date();
+                const newNextDoseTime = new Date(now.getTime() + frequencyHours * 60 * 60 * 1000);
+
+                await updateDoc(docRef, {
+                    nextDose: newNextDoseTime,
+                    lastTaken: serverTimestamp(),
+                });
+                showMessage('เยี่ยมมาก!', 'บันทึกการกินยาเรียบร้อยแล้ว! โดสถัดไปถูกคำนวณแล้ว');
+            } catch (e) {
+                console.error("Error updating document: ", e);
+                showMessage('ข้อผิดพลาด', `ไม่สามารถอัปเดตข้อมูลการกินยาได้: ${e.message}`);
+            }
+        }
+
+        // --- REALTIME LISTENER ---
+
+        function setupRealtimeListener() {
+            const collectionRef = getMedicineCollectionRef();
+            if (!collectionRef) return;
+
+            // We don't use orderBy here to avoid index errors, we will sort in memory.
+            const q = query(collectionRef);
+
+            onSnapshot(q, (snapshot) => {
+                const medicines = [];
+                snapshot.forEach((doc) => {
+                    medicines.push({ id: doc.id, ...doc.data() });
+                });
+               
+                // Sort the medicines list by nextDose time (closest next dose first)
+                medicines.sort((a, b) => {
+                    const timeA = a.nextDose ? a.nextDose.toDate().getTime() : Infinity;
+                    const timeB = b.nextDose ? b.nextDose.toDate().getTime() : Infinity;
+                    return timeA - timeB;
+                });
+
+                renderMedicines(medicines);
+            }, (error) => {
+                console.error("Error listening to medicines: ", error);
+                showMessage('ข้อผิดพลาด', `การเชื่อมต่อเรียลไทม์ล้มเหลว: ${error.message}`);
+            });
+        }
+
+        // --- DOM MANIPULATION ---
+
+        function renderMedicines(medicines) {
+            const listContainer = document.getElementById('medicines-list');
+            listContainer.innerHTML = '';
+            document.getElementById('empty-state').classList.toggle('hidden', medicines.length > 0);
+
+            const now = Date.now();
+
+            medicines.forEach(medicine => {
+                const nextDoseTime = medicine.nextDose ? medicine.nextDose.toDate().getTime() : Infinity;
+                const isOverdue = nextDoseTime < now;
+                const timeText = formatNextDoseTime(medicine.nextDose);
+
+                // Determine color and status text
+                let statusColor = 'text-secondary';
+                let statusText = 'กำลังรอ...';
+                let nextDoseLabel = 'โดสถัดไป';
+                let buttonDisabled = false;
+
+                if (isOverdue) {
+                    statusColor = 'text-red-500 font-bold';
+                    statusText = 'เลยกำหนดแล้ว!';
+                    nextDoseLabel = 'โดสที่พลาดไป';
+                }
+
+                const medicineCard = document.createElement('div');
+                medicineCard.className = `p-4 border rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-md ${isOverdue ? 'bg-red-50 border-red-200' : 'bg-card border-gray-100'}`;
+               
+                medicineCard.innerHTML = `
+                    <div class="flex-grow mb-3 sm:mb-0">
+                        <h3 class="text-xl font-bold text-gray-900">${medicine.name}</h3>
+                        <p class="text-sm text-gray-600">ปริมาณ: ${medicine.dosage}</p>
+                        <p class="text-sm text-gray-600">ความถี่: ทุก ${medicine.frequencyHours} ชั่วโมง</p>
+                       
+                        <div class="mt-2">
+                            <span class="text-xs font-semibold uppercase ${isOverdue ? 'text-red-500' : 'text-gray-500'}">${nextDoseLabel}:</span>
+                            <span class="ml-1 text-base ${statusColor}">${timeText}</span>
+                        </div>
+                    </div>
+                    <button id="take-${medicine.id}"
+                            class="w-full sm:w-auto flex-shrink-0 py-2 px-4 rounded-lg shadow-md text-white ${isOverdue ? 'bg-orange-500 hover:bg-orange-600' : 'bg-primary hover:bg-blue-600'} transition duration-150 ease-in-out font-medium">
+                        ${isOverdue ? 'ทานแล้ว (เลยเวลา)' : 'กินยาแล้ว'}
+                    </button>
+                `;
+
+                // Add event listener to the "Take Medicine" button
+                const takeButton = medicineCard.querySelector(`#take-${medicine.id}`);
+                takeButton.addEventListener('click', () => {
+                    // Check if isAuthReady and userId are set before performing the action
+                    if (isAuthReady && userId) {
+                        takeMedicine(medicine.id, medicine.frequencyHours);
+                    } else {
+                        showMessage('ข้อผิดพลาด', 'ยังไม่ได้ตรวจสอบสถานะผู้ใช้ กรุณารอสักครู่');
+                    }
+                });
+
+                listContainer.appendChild(medicineCard);
+            });
+        }
+
+        // --- EVENT LISTENERS ---
+
+        document.getElementById('add-medicine-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const nameInput = document.getElementById('name');
+            const dosageInput = document.getElementById('dosage');
+            const frequencyInput = document.getElementById('frequency');
+            const errorElement = document.getElementById('error-message');
+
+            errorElement.classList.add('hidden');
+
+            if (!nameInput.value || !dosageInput.value || !frequencyInput.value) {
+                errorElement.textContent = 'กรุณากรอกข้อมูลให้ครบถ้วน';
+                errorElement.classList.remove('hidden');
+                return;
+            }
+
+            const medicineData = {
+                name: nameInput.value,
+                dosage: dosageInput.value,
+                frequency: frequencyInput.value,
+            };
+
+            // Check if isAuthReady and userId are set before performing the action
+            if (isAuthReady && userId) {
+                saveMedicine(medicineData);
+            } else {
+                showMessage('ข้อผิดพลาด', 'ยังไม่ได้ตรวจสอบสถานะผู้ใช้ กรุณารอสักครู่');
+            }
+        });
+
+        // --- START APPLICATION ---
+        initFirebase();
+    </script>
+</body>
+</html>
